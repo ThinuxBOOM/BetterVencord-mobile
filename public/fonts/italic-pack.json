@@ -1,0 +1,12 @@
+{
+	"spec": 1,
+	"name": "BetterVencord Italics",
+	"description": "Mostly-italic Google Fonts pack for BetterVencord mobile. Install via your loader's Fonts page, then pick a family in DiscordStyler > Font > Custom.",
+	"main": {
+		"Playfair Italic": "https://fonts.gstatic.com/s/playfairdisplay/v40/nuFRD-vYSZviVYUb_rj3ij__anPXDTnCjmHKM4nYO7KN_qiTXtHA_A.ttf",
+		"Lora Italic": "https://fonts.gstatic.com/s/lora/v37/0QI8MX1D_JOuMw_hLdO6T2wV9KnW-MoFoq92mQ.ttf",
+		"Roboto Italic": "https://fonts.gstatic.com/s/roboto/v51/KFOKCnqEu92Fr1Mu53ZEC9_Vu3r1gIhOszmOClHrs6ljXfMMLoHQuAj-lg.ttf",
+		"Open Sans Italic": "https://fonts.gstatic.com/s/opensans/v44/memQYaGs126MiZpBA-UFUIcVXSCEkx2cmqvXlWq8tWZ0Pw86hd0Rk8ZkWVAexQ.ttf",
+		"Dancing Script": "https://fonts.gstatic.com/s/dancingscript/v29/If2cXTr6YS-zF4S-kcSWSVi_sxjsohD9F50Ruu7BMSo3Sup5.ttf"
+	}
+}

@@ -1,6 +1,7 @@
 import { readFile, writeFile, readdir } from "fs/promises";
 import { extname } from "path";
 import { createHash } from "crypto";
+import { cpSync, existsSync, mkdirSync } from "fs";
 
 import { rollup } from "rollup";
 import esbuild from "rollup-plugin-esbuild";
@@ -97,4 +98,16 @@ for (let plug of await readdir("./plugins")) {
 		console.error("Failed to build plugin...", e);
 		process.exit(1);
 	}
+}
+
+// Publish static extras (font packs, etc.) alongside the plugins.
+try {
+	if (existsSync("./public")) {
+		mkdirSync("./dist", { recursive: true });
+		cpSync("./public", "./dist", { recursive: true });
+		console.log("Copied public/ to dist/.");
+	}
+} catch (e) {
+	console.error("Failed to copy public/ ...", e);
+	process.exit(1);
 }
