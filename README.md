@@ -19,7 +19,7 @@ paste a plugin URL, done. No terminal, no build tools on your phone.
 
 ## Plugin URLs
 
-Base: `https://thinuxboom.github.io/BetterVencord-mobile/dist/`
+Base: `https://thinuxboom.github.io/BetterVencord-mobile/`
 
 | Plugin | URL suffix | What it does on mobile |
 |---|---|---|
@@ -50,7 +50,7 @@ are credited in each plugin file; all ports stay under Vencord's GPL-3.0.
 Full URL example:
 
 ```
-https://thinuxboom.github.io/BetterVencord-mobile/dist/chat-archive
+https://thinuxboom.github.io/BetterVencord-mobile/chat-archive
 ```
 
 ## Mobile notes (what changed vs desktop)
