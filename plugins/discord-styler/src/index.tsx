@@ -1,20 +1,26 @@
+import { findByName } from "@vendetta/metro";
 import { React, ReactNative } from "@vendetta/metro/common";
+import { after } from "@vendetta/patcher";
 import { storage } from "@vendetta/plugin";
 import { useProxy } from "@vendetta/storage";
 import { semanticColors } from "@vendetta/ui";
 import { Forms } from "@vendetta/ui/components";
 import { showToast } from "@vendetta/ui/toasts";
+import { findInReactTree } from "@vendetta/utils";
 
-// Mobile has no DOM/CSS cascade, so the desktop wallpaper/font engine cannot
-// run here. This port covers what IS patchable at runtime: the accent scale
-// and background colors. Wallpapers, fonts and full themes belong in your
-// loader's Themes page (a Revenge/Vendetta theme JSON).
+// Mobile has no DOM/CSS cascade, so fonts and transparency sliders cannot
+// run here. Accent colors patch the runtime color layer, and wallpapers wrap
+// the chat view in an ImageBackground (the same technique the loader's own
+// theme engine uses). Fonts stay in your loader's Themes page.
 
 storage.accent ??= "default";
 storage.amoled ??= false;
+storage.wallpaperUrl ??= "";
+storage.wallpaperBlur ??= "0";
+storage.wallpaperDim ??= "0.4";
 
 const { ScrollView, Text } = ReactNative;
-const { FormSection, FormRow, FormRadioRow, FormSwitchRow } = Forms;
+const { FormSection, FormRow, FormRadioRow, FormSwitchRow, FormInput } = Forms;
 
 const ACCENTS = [
 	{ name: "Discord default", value: "default" },
@@ -94,9 +100,62 @@ function applyTheme(): string[] {
 	return applied;
 }
 
+let unpatchWallpaper: (() => void) | undefined;
+let wallpaperSupported = false;
+
+function num(v: unknown, fb: number): number {
+	const n = Number(v);
+	return Number.isFinite(n) ? n : fb;
+}
+
+function WallpaperBackground({ children }: { children: React.ReactNode; }) {
+	const uri = String(storage.wallpaperUrl ?? "").trim();
+	if (!uri) return <>{children}</>;
+	const RN = ReactNative as any;
+	const dim = Math.max(0, Math.min(0.95, num(storage.wallpaperDim, 0.4)));
+	const blur = Math.max(0, num(storage.wallpaperBlur, 0));
+	return (
+		<RN.ImageBackground style={{ flex: 1, height: "100%" }} source={{ uri }} blurRadius={blur}>
+			<RN.View style={{ position: "absolute", left: 0, right: 0, top: 0, bottom: 0, backgroundColor: "black", opacity: dim }} />
+			{children}
+		</RN.ImageBackground>
+	);
+}
+
+function patchWallpaper() {
+	if (unpatchWallpaper) {
+		try { unpatchWallpaper(); } catch { }
+		unpatchWallpaper = undefined;
+	}
+	wallpaperSupported = false;
+	try {
+		const RN = ReactNative as any;
+		if (!RN?.ImageBackground || !RN?.View) return;
+		const Messages = findByName("MessagesConnected");
+		if (!Messages?.prototype?.render) return;
+		unpatchWallpaper = after("render", Messages.prototype, (_: any, ret: any) => {
+			try {
+				const uri = String(storage.wallpaperUrl ?? "").trim();
+				if (!uri) return ret;
+				// Make the messages layer transparent so the image shows
+				// through, mirroring the loader's own theme-background patch.
+				const node = findInReactTree(ret, (t: any) => t?.props && "HACK_fixModalInteraction" in t.props && t.props.style);
+				if (node?.props) {
+					node.props.style = [node.props.style, { backgroundColor: "transparent" }];
+				}
+				return <WallpaperBackground>{ret}</WallpaperBackground>;
+			} catch {
+				return ret;
+			}
+		});
+		wallpaperSupported = true;
+	} catch { /* chat view unavailable on this version */ }
+}
+
 function Settings() {
 	useProxy(storage);
 	const [status, setStatus] = React.useState("");
+	const [wpStatus, setWpStatus] = React.useState("");
 
 	function reapply() {
 		const applied = applyTheme();
@@ -143,10 +202,59 @@ function Settings() {
 					<FormRow label="Status" subLabel={status} />
 				)}
 			</FormSection>
+			<FormSection title="Wallpaper">
+				<Text style={{ opacity: 0.7, marginHorizontal: 12, marginBottom: 4 }}>
+					Chat background image (direct image URL). Dim darkens it so text stays readable.
+				</Text>
+				<FormInput
+					title=""
+					placeholder="https://.../wallpaper.jpg"
+					value={String(storage.wallpaperUrl ?? "")}
+					onChange={(v: string) => { storage.wallpaperUrl = v; }}
+				/>
+				<Text style={{ opacity: 0.7, marginHorizontal: 12, marginBottom: 4, marginTop: 8 }}>
+					Blur (0-25, 0 = off)
+				</Text>
+				<FormInput
+					title=""
+					placeholder="0"
+					value={String(storage.wallpaperBlur ?? "")}
+					onChange={(v: string) => { storage.wallpaperBlur = v.replace(/[^0-9.]/g, ""); }}
+				/>
+				<Text style={{ opacity: 0.7, marginHorizontal: 12, marginBottom: 4, marginTop: 8 }}>
+					Darken overlay (0-0.95)
+				</Text>
+				<FormInput
+					title=""
+					placeholder="0.4"
+					value={String(storage.wallpaperDim ?? "")}
+					onChange={(v: string) => { storage.wallpaperDim = v.replace(/[^0-9.]/g, ""); }}
+				/>
+				<FormRow
+					label="Wallpaper status"
+					subLabel={!wallpaperSupported
+						? "Chat view hook unavailable on this Discord version."
+						: storage.wallpaperUrl
+							? "Active. Switch channels to refresh the view."
+							: "No wallpaper set."}
+				/>
+				{!!storage.wallpaperUrl && (
+					<FormRow
+						label="Remove wallpaper"
+						onPress={() => {
+							storage.wallpaperUrl = "";
+							setWpStatus("Wallpaper removed. Switch channels to refresh.");
+						}}
+					/>
+				)}
+				{!!wpStatus && (
+					<FormRow label="Status" subLabel={wpStatus} />
+				)}
+			</FormSection>
 			<FormSection title="Mobile notes">
 				<Text style={{ opacity: 0.7, marginHorizontal: 12, marginVertical: 6 }}>
-					Wallpapers, fonts and transparency need a full theme: install one from your loader's Themes page.
-					This plugin only overrides accent and background colors, best-effort per Discord version.
+					Fonts need a full theme: install one from your loader's Themes page.
+					Per-server wallpapers live in GuildStyler and override this one.
 				</Text>
 			</FormSection>
 		</ScrollView>
@@ -154,7 +262,15 @@ function Settings() {
 }
 
 export default {
-	onLoad: () => { try { applyTheme(); } catch { } },
-	onUnload: () => { try { restore(); } catch { } },
+	onLoad: () => {
+		try { applyTheme(); } catch { }
+		patchWallpaper();
+	},
+	onUnload: () => {
+		try { unpatchWallpaper?.(); } catch { }
+		unpatchWallpaper = undefined;
+		wallpaperSupported = false;
+		try { restore(); } catch { }
+	},
 	settings: Settings,
 };

@@ -1,17 +1,21 @@
-import { findByStoreName } from "@vendetta/metro";
+import { findByName, findByStoreName } from "@vendetta/metro";
 import { React, ReactNative } from "@vendetta/metro/common";
+import { after } from "@vendetta/patcher";
 import { storage } from "@vendetta/plugin";
 import { useProxy } from "@vendetta/storage";
 import { semanticColors } from "@vendetta/ui";
 import { Button, Forms } from "@vendetta/ui/components";
 import { showToast } from "@vendetta/ui/toasts";
+import { findInReactTree } from "@vendetta/utils";
 
-// Mobile companion to DiscordStyler: per-server accent colors applied to the
-// same runtime color layer. Servers without a mapping keep whatever the
-// global theme/accent currently is.
+// Mobile companion to DiscordStyler: per-server accents and wallpapers
+// applied to the same runtime layers. Servers without a mapping keep your
+// global DiscordStyler setup.
 
 storage.enabled ??= true;
 storage.maps ??= {};
+storage.wallpaperDim ??= "0.4";
+storage.wallpaperBlur ??= "0";
 
 const { ScrollView, Text } = ReactNative;
 const { FormSection, FormRow, FormInput, FormSwitchRow } = Forms;
@@ -23,7 +27,8 @@ const BRAND_KEYS = ["BRAND_500", "BRAND_560", "BRAND_600"];
 
 interface GuildMap {
 	name: string;
-	accent: string;
+	accent?: string;
+	wallpaper?: string;
 }
 
 const originals = new Map<string, any>();
@@ -96,6 +101,62 @@ function applyForGuild(guildId: string | null): boolean {
 }
 
 let unsubscribe: (() => void) | undefined;
+let unpatchWallpaper: (() => void) | undefined;
+
+function num(v: unknown, fb: number): number {
+	const n = Number(v);
+	return Number.isFinite(n) ? n : fb;
+}
+
+function currentWallpaper(): string {
+	try {
+		if (!storage.enabled) return "";
+		const id = currentGuild().id;
+		if (!id) return "";
+		return String(readMaps()[id]?.wallpaper ?? "").trim();
+	} catch {
+		return "";
+	}
+}
+
+function GuildWallpaper({ children }: { children: React.ReactNode; }) {
+	const uri = currentWallpaper();
+	if (!uri) return <>{children}</>;
+	const RN = ReactNative as any;
+	const dim = Math.max(0, Math.min(0.95, num(storage.wallpaperDim, 0.4)));
+	const blur = Math.max(0, num(storage.wallpaperBlur, 0));
+	return (
+		<RN.ImageBackground style={{ flex: 1, height: "100%" }} source={{ uri }} blurRadius={blur}>
+			<RN.View style={{ position: "absolute", left: 0, right: 0, top: 0, bottom: 0, backgroundColor: "black", opacity: dim }} />
+			{children}
+		</RN.ImageBackground>
+	);
+}
+
+function patchWallpaper() {
+	if (unpatchWallpaper) {
+		try { unpatchWallpaper(); } catch { }
+		unpatchWallpaper = undefined;
+	}
+	try {
+		const RN = ReactNative as any;
+		if (!RN?.ImageBackground || !RN?.View) return;
+		const Messages = findByName("MessagesConnected");
+		if (!Messages?.prototype?.render) return;
+		unpatchWallpaper = after("render", Messages.prototype, (_: any, ret: any) => {
+			try {
+				if (!currentWallpaper()) return ret;
+				const node = findInReactTree(ret, (t: any) => t?.props && "HACK_fixModalInteraction" in t.props && t.props.style);
+				if (node?.props) {
+					node.props.style = [node.props.style, { backgroundColor: "transparent" }];
+				}
+				return <GuildWallpaper>{ret}</GuildWallpaper>;
+			} catch {
+				return ret;
+			}
+		});
+	} catch { /* chat view unavailable on this version */ }
+}
 
 function subscribe() {
 	try {
@@ -115,10 +176,12 @@ function subscribe() {
 function Settings() {
 	useProxy(storage);
 	const [hex, setHex] = React.useState("");
+	const [wurl, setWurl] = React.useState("");
 	const [status, setStatus] = React.useState("");
 	const g = currentGuild();
 	const maps = readMaps();
 	const ids = Object.keys(maps);
+	const existing = g.id ? maps[g.id] : undefined;
 
 	function save() {
 		if (!g.id) {
@@ -126,14 +189,27 @@ function Settings() {
 			return;
 		}
 		const accent = hex.trim();
-		if (!/^#[0-9a-f]{6}$/i.test(accent)) {
-			setStatus("Enter a hex color like #43b581.");
+		const wallpaper = wurl.trim();
+		if (accent && !/^#[0-9a-f]{6}$/i.test(accent)) {
+			setStatus("Accent must look like #43b581 (or leave it empty).");
 			return;
 		}
-		storage.maps = { ...maps, [g.id]: { name: g.name, accent } };
+		if (!accent && !wallpaper) {
+			setStatus("Enter an accent and/or a wallpaper URL first.");
+			return;
+		}
+		storage.maps = {
+			...maps,
+			[g.id]: {
+				name: g.name,
+				accent: accent || existing?.accent,
+				wallpaper: wallpaper || existing?.wallpaper,
+			},
+		};
 		setHex("");
+		setWurl("");
 		const ok = applyForGuild(g.id);
-		setStatus(ok ? `Saved accent for ${g.name}.` : "Saved. Accent keys were not patchable on this version.");
+		setStatus(`Saved style for ${g.name}.${ok ? "" : " Accent keys were not patchable on this version."} Switch channels to refresh the wallpaper.`);
 	}
 
 	function remove(id: string) {
@@ -163,8 +239,14 @@ function Settings() {
 					}}
 				/>
 				<FormRow label="Current server" subLabel={g.name ? `${g.name} (${g.id})` : "open a server first"} />
+				{existing && (
+					<FormRow
+						label="Saved style"
+						subLabel={`${existing.accent ?? "no accent"}${existing.wallpaper ? " + wallpaper" : ""}`}
+					/>
+				)}
 				<Text style={{ opacity: 0.7, marginHorizontal: 12, marginBottom: 4 }}>
-					Hex accent for the current server (e.g. #43b581)
+					Hex accent for the current server (e.g. #43b581, empty = keep saved)
 				</Text>
 				<FormInput
 					title=""
@@ -172,7 +254,16 @@ function Settings() {
 					value={hex}
 					onChange={setHex}
 				/>
-				<FormRow label="Save accent for this server" onPress={save} />
+				<Text style={{ opacity: 0.7, marginHorizontal: 12, marginBottom: 4, marginTop: 8 }}>
+					Wallpaper image URL for this server (empty = keep saved)
+				</Text>
+				<FormInput
+					title=""
+					placeholder="https://.../server-wallpaper.jpg"
+					value={wurl}
+					onChange={setWurl}
+				/>
+				<FormRow label="Save style for this server" onPress={save} />
 				<FormRow label="Apply now" subLabel="Re-apply for the open server" onPress={applyNow} />
 				{!!status && (
 					<FormRow label="Status" subLabel={status} />
@@ -188,7 +279,7 @@ function Settings() {
 					<FormRow
 						key={id}
 						label={maps[id]?.name || id.slice(-6)}
-						subLabel={maps[id]?.accent}
+						subLabel={`${maps[id]?.accent ?? "no accent"}${maps[id]?.wallpaper ? " + wallpaper" : ""}`}
 						trailing={() => (
 							<AnyButton
 								text="Remove"
@@ -208,10 +299,13 @@ export default {
 	onLoad: () => {
 		try { applyForGuild(currentGuild().id); } catch { }
 		subscribe();
+		patchWallpaper();
 	},
 	onUnload: () => {
 		try { unsubscribe?.(); } catch { }
 		unsubscribe = undefined;
+		try { unpatchWallpaper?.(); } catch { }
+		unpatchWallpaper = undefined;
 		try { restore(); } catch { }
 	},
 	settings: Settings,

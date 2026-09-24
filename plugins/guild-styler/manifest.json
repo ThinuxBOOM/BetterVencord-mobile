@@ -1,6 +1,6 @@
 {
 	"name": "GuildStyler",
-	"description": "Per-server accent colors, auto-swapped on server switch. Falls back to your global accent elsewhere.",
+	"description": "Per-server accents and wallpapers, auto-swapped on server switch. Falls back to your global style elsewhere.",
 	"authors": [
 		{
 			"name": "Thinux",
