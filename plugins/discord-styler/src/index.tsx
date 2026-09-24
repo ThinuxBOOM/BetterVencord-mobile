@@ -18,6 +18,13 @@ storage.amoled ??= false;
 storage.wallpaperUrl ??= "";
 storage.wallpaperBlur ??= "0";
 storage.wallpaperDim ??= "0.4";
+storage.textColor ??= "";
+storage.mutedColor ??= "";
+storage.channelColor ??= "";
+storage.mentionColor ??= "";
+storage.statusOnline ??= "";
+storage.statusIdle ??= "";
+storage.statusDnd ??= "";
 
 const { ScrollView, Text } = ReactNative;
 const { FormSection, FormRow, FormRadioRow, FormSwitchRow, FormInput } = Forms;
@@ -32,6 +39,13 @@ const ACCENTS = [
 ];
 
 const BRAND_KEYS = ["BRAND_500", "BRAND_560", "BRAND_600"];
+const TEXT_KEYS = ["TEXT_NORMAL"];
+const MUTED_KEYS = ["TEXT_MUTED"];
+const CHANNEL_KEYS = ["CHANNELS_DEFAULT"];
+const MENTION_KEYS = ["TEXT_BRAND", "MENTION_FOREGROUND", "TEXT_LINK"];
+const ONLINE_KEYS = ["STATUS_POSITIVE", "STATUS_GREEN"];
+const IDLE_KEYS = ["STATUS_WARNING", "STATUS_YELLOW"];
+const DND_KEYS = ["STATUS_DANGER", "STATUS_RED"];
 const BG_KEYS = [
 	"BACKGROUND_PRIMARY",
 	"BACKGROUND_SECONDARY",
@@ -93,6 +107,22 @@ function applyTheme(): string[] {
 		if (storage.amoled) {
 			for (const k of BG_KEYS) {
 				if (trySet(sc, k, "#000000")) applied.push(k);
+			}
+		}
+		const customs: [unknown, string[]][] = [
+			[storage.textColor, TEXT_KEYS],
+			[storage.mutedColor, MUTED_KEYS],
+			[storage.channelColor, CHANNEL_KEYS],
+			[storage.mentionColor, MENTION_KEYS],
+			[storage.statusOnline, ONLINE_KEYS],
+			[storage.statusIdle, IDLE_KEYS],
+			[storage.statusDnd, DND_KEYS],
+		];
+		for (const [value, keys] of customs) {
+			const hex = String(value ?? "").trim();
+			if (!/^#[0-9a-f]{6}$/i.test(hex)) continue;
+			for (const k of keys) {
+				if (trySet(sc, k, hex)) applied.push(k);
 			}
 		}
 	} catch { /* never break Discord over a color */ }
@@ -304,6 +334,30 @@ function Settings() {
 				{!!status && (
 					<FormRow label="Status" subLabel={status} />
 				)}
+			</FormSection>
+			<FormSection title="Text & UI colors">
+				<Text style={{ opacity: 0.7, marginHorizontal: 12, marginBottom: 4 }}>
+					Hex colors (#rrggbb, empty = default). Tap Re-apply theme when done.
+				</Text>
+				<Text style={{ opacity: 0.7, marginHorizontal: 12, marginBottom: 4, marginTop: 8 }}>Main text</Text>
+				<FormInput title="" placeholder="#dbdee1" value={String(storage.textColor ?? "")} onChange={(v: string) => { storage.textColor = v; }} />
+				<Text style={{ opacity: 0.7, marginHorizontal: 12, marginBottom: 4, marginTop: 8 }}>Muted text</Text>
+				<FormInput title="" placeholder="#949ba4" value={String(storage.mutedColor ?? "")} onChange={(v: string) => { storage.mutedColor = v; }} />
+				<Text style={{ opacity: 0.7, marginHorizontal: 12, marginBottom: 4, marginTop: 8 }}>Channel names</Text>
+				<FormInput title="" placeholder="#949ba4" value={String(storage.channelColor ?? "")} onChange={(v: string) => { storage.channelColor = v; }} />
+				<Text style={{ opacity: 0.7, marginHorizontal: 12, marginBottom: 4, marginTop: 8 }}>Mentions & links</Text>
+				<FormInput title="" placeholder="#5865f2" value={String(storage.mentionColor ?? "")} onChange={(v: string) => { storage.mentionColor = v; }} />
+				<Text style={{ opacity: 0.7, marginHorizontal: 12, marginBottom: 4, marginTop: 8 }}>Status: online</Text>
+				<FormInput title="" placeholder="#43b581" value={String(storage.statusOnline ?? "")} onChange={(v: string) => { storage.statusOnline = v; }} />
+				<Text style={{ opacity: 0.7, marginHorizontal: 12, marginBottom: 4, marginTop: 8 }}>Status: idle</Text>
+				<FormInput title="" placeholder="#faa61a" value={String(storage.statusIdle ?? "")} onChange={(v: string) => { storage.statusIdle = v; }} />
+				<Text style={{ opacity: 0.7, marginHorizontal: 12, marginBottom: 4, marginTop: 8 }}>Status: do not disturb</Text>
+				<FormInput title="" placeholder="#f04747" value={String(storage.statusDnd ?? "")} onChange={(v: string) => { storage.statusDnd = v; }} />
+				<FormRow
+					label="Apply colors"
+					subLabel="Applies every hex value above"
+					onPress={reapply}
+				/>
 			</FormSection>
 			<FormSection title="Wallpaper">
 				<Text style={{ opacity: 0.7, marginHorizontal: 12, marginBottom: 4 }}>
