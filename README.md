@@ -29,7 +29,7 @@ Base: `https://thinuxboom.github.io/BetterVencord-mobile/`
 | RemindMe | `remind-me` | Long-press a message for 1h/24h reminder toasts, survives restarts |
 | ServerJanitor | `server-janitor` | Emoji/sticker inventory, in-place delete, JSON export to clipboard |
 | SettingsVault | `settings-vault` | Backup/restore theme links + settings as one JSON file |
-| DiscordStyler | `discord-styler` | Chat wallpaper (URL + blur + dim), accent presets, true-black AMOLED |
+| DiscordStyler | `discord-styler` | Fonts, chat wallpaper (URL + blur + dim), accent/text/status colors, AMOLED |
 | GuildStyler | `guild-styler` | Per-server accents + wallpapers, auto-swapped on server switch |
 | SnippetStudio | `snippet-studio` | Hides gift/GIF/sticker/Apps buttons + custom CSS box |
 

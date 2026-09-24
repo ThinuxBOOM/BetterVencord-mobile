@@ -1,5 +1,5 @@
 import { find, findByDisplayName, findByName } from "@vendetta/metro";
-import { React, ReactNative, clipboard } from "@vendetta/metro/common";
+import { React, ReactNative, clipboard, constants } from "@vendetta/metro/common";
 import { after } from "@vendetta/patcher";
 import { storage } from "@vendetta/plugin";
 import { useProxy } from "@vendetta/storage";
@@ -8,13 +8,15 @@ import { Forms } from "@vendetta/ui/components";
 import { showToast } from "@vendetta/ui/toasts";
 import { findInReactTree } from "@vendetta/utils";
 
-// Mobile has no DOM/CSS cascade, so fonts and transparency sliders cannot
-// run here. Accent colors patch the runtime color layer, and wallpapers wrap
-// the chat view in an ImageBackground (the same technique the loader's own
-// theme engine uses). Fonts stay in your loader's Themes page.
+// Mobile has no DOM/CSS cascade, so transparency sliders cannot run here.
+// Accent, text and background colors patch the runtime color layer, fonts
+// patch the central Fonts constants, and wallpapers wrap the chat view in
+// an ImageBackground (the same technique the loader's own theme engine uses).
 
 storage.accent ??= "default";
 storage.amoled ??= false;
+storage.font ??= "default";
+storage.customFont ??= "";
 storage.wallpaperUrl ??= "";
 storage.wallpaperBlur ??= "0";
 storage.wallpaperDim ??= "0.4";
@@ -46,6 +48,61 @@ const MENTION_KEYS = ["TEXT_BRAND", "MENTION_FOREGROUND", "TEXT_LINK"];
 const ONLINE_KEYS = ["STATUS_POSITIVE", "STATUS_GREEN"];
 const IDLE_KEYS = ["STATUS_WARNING", "STATUS_YELLOW"];
 const DND_KEYS = ["STATUS_DANGER", "STATUS_RED"];
+
+const FONT_PRESETS = [
+	{ name: "Discord default", value: "default" },
+	{ name: "Roboto", value: "Roboto" },
+	{ name: "Sans serif", value: "sans-serif" },
+	{ name: "Sans serif light", value: "sans-serif-light" },
+	{ name: "Sans serif condensed", value: "sans-serif-condensed" },
+	{ name: "Sans serif medium", value: "sans-serif-medium" },
+	{ name: "Serif", value: "serif" },
+	{ name: "Monospace", value: "monospace" },
+	{ name: "Custom family (type below)", value: "custom" },
+];
+
+const fontOriginals = new Map<string, any>();
+let lastFontApplied = 0;
+
+function restoreFont() {
+	try {
+		const F = (constants as any)?.Fonts;
+		if (F && typeof F === "object") {
+			for (const [k, v] of fontOriginals) {
+				try { F[k] = v; } catch { /* ignore */ }
+			}
+		}
+	} catch { /* ignore */ }
+	fontOriginals.clear();
+	lastFontApplied = 0;
+}
+
+// Patches every string entry of the central Fonts constants to one family.
+// Key names are enumerated live so this survives Discord renames.
+function applyFont(): number {
+	restoreFont();
+	let count = 0;
+	try {
+		const choice = String(storage.font ?? "default");
+		const family = choice === "custom"
+			? String(storage.customFont ?? "").trim()
+			: choice === "default" ? "" : choice;
+		if (!family) return 0;
+		const F = (constants as any)?.Fonts;
+		if (!F || typeof F !== "object") return 0;
+		for (const k of Object.keys(F)) {
+			try {
+				if (typeof F[k] === "string" && F[k]) {
+					if (!fontOriginals.has(k)) fontOriginals.set(k, F[k]);
+					F[k] = family;
+					if (F[k] === family) count++;
+				}
+			} catch { /* skip locked keys */ }
+		}
+	} catch { /* never break Discord over a font */ }
+	lastFontApplied = count;
+	return count;
+}
 const BG_KEYS = [
 	"BACKGROUND_PRIMARY",
 	"BACKGROUND_SECONDARY",
@@ -292,8 +349,9 @@ function Settings() {
 
 	function reapply() {
 		const applied = applyTheme();
-		if (applied.length) {
-			setStatus(`Applied ${applied.length} color key(s): ${applied.slice(0, 6).join(", ")}${applied.length > 6 ? "..." : ""}.`);
+		const fonts = applyFont();
+		if (applied.length || fonts) {
+			setStatus(`Applied ${applied.length} color key(s)${fonts ? ` + font (${fonts} families)` : ""}: ${applied.slice(0, 6).join(", ")}${applied.length > 6 ? "..." : ""}.`.replace(": .", "."));
 			showToast("Theme applied");
 		} else {
 			setStatus("No theme keys were patchable on this Discord version. Accent/AMOLED need a loader theme instead; your choices are saved and retried on each start.");
@@ -334,6 +392,35 @@ function Settings() {
 				{!!status && (
 					<FormRow label="Status" subLabel={status} />
 				)}
+			</FormSection>
+			<FormSection title="Font">
+				{FONT_PRESETS.map(f => (
+					<FormRadioRow
+						key={f.value}
+						label={f.name}
+						subLabel={f.value === "default" ? "No override" : f.value === "custom" ? "Use the family typed below" : f.value}
+						selected={storage.font === f.value}
+						onPress={() => {
+							storage.font = f.value;
+							reapply();
+						}}
+					/>
+				))}
+				<Text style={{ opacity: 0.7, marginHorizontal: 12, marginBottom: 4, marginTop: 8 }}>
+					Custom family (e.g. a font you installed in your loader's Fonts page)
+				</Text>
+				<FormInput
+					title=""
+					placeholder="Family name"
+					value={String(storage.customFont ?? "")}
+					onChange={(v: string) => { storage.customFont = v; }}
+				/>
+				<FormRow
+					label="Font status"
+					subLabel={lastFontApplied
+						? `Applied to ${lastFontApplied} font families. Reload Discord if some text keeps the old font.`
+						: "Default font in use. If a preset shows no change, that family is missing on your device."}
+				/>
 			</FormSection>
 			<FormSection title="Text & UI colors">
 				<Text style={{ opacity: 0.7, marginHorizontal: 12, marginBottom: 4 }}>
@@ -415,8 +502,10 @@ function Settings() {
 			</FormSection>
 			<FormSection title="Mobile notes">
 				<Text style={{ opacity: 0.7, marginHorizontal: 12, marginVertical: 6 }}>
-					Fonts need a full theme: install one from your loader's Themes page.
-					Per-server wallpapers live in GuildStyler and override this one.
+					One family applies to every weight, so bold text uses the same font.
+					For Google Fonts: install the font in your loader's Fonts page, then
+					type its family name under Custom. Per-server wallpapers live in
+					GuildStyler and override the one here.
 				</Text>
 			</FormSection>
 		</ScrollView>
@@ -426,6 +515,7 @@ function Settings() {
 export default {
 	onLoad: () => {
 		try { applyTheme(); } catch { }
+		try { applyFont(); } catch { }
 		patchWallpaper();
 	},
 	onUnload: () => {
@@ -434,6 +524,7 @@ export default {
 		wallpaperSupported = false;
 		resolvedChatView = "";
 		try { restore(); } catch { }
+		try { restoreFont(); } catch { }
 	},
 	settings: Settings,
 };
