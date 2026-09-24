@@ -1,5 +1,5 @@
 import { find, findByDisplayName, findByName } from "@vendetta/metro";
-import { React, ReactNative } from "@vendetta/metro/common";
+import { React, ReactNative, clipboard } from "@vendetta/metro/common";
 import { after } from "@vendetta/patcher";
 import { storage } from "@vendetta/plugin";
 import { useProxy } from "@vendetta/storage";
@@ -205,6 +205,45 @@ function Settings() {
 	const [status, setStatus] = React.useState("");
 	const [wpStatus, setWpStatus] = React.useState("");
 
+	function describe(c: any): string {
+		try {
+			if (!c) return "missing";
+			if (c?.prototype?.render) return "class-component";
+			if (typeof c === "function") return "function-component";
+			if (typeof c === "object") return `object[${Object.keys(c).slice(0, 6).join("|")}]`;
+			return typeof c;
+		} catch {
+			return "unreadable";
+		}
+	}
+
+	function copyDiagnostics() {
+		const names = ["MessagesConnected", "Messages", "ChatMessages", "MessageListConnected", "ConnectedMessages"];
+		const lines: string[] = [];
+		try {
+			const RN = ReactNative as any;
+			lines.push(`ImageBackground: ${!!RN?.ImageBackground}, View: ${!!RN?.View}`);
+		} catch (e) {
+			lines.push(`RN check failed: ${e instanceof Error ? e.message : e}`);
+		}
+		for (const n of names) {
+			const bits: string[] = [];
+			try { bits.push(`displayName=${describe(findByDisplayName(n, false))}`); }
+			catch { bits.push("displayName=THROWS"); }
+			try { bits.push(`name=${describe(findByName(n, false))}`); }
+			catch { bits.push("name=THROWS"); }
+			lines.push(`${n}: ${bits.join(", ")}`);
+		}
+		lines.push(`hook: ${wallpaperSupported ? `attached (${resolvedChatView})` : "not attached"}`);
+		try {
+			clipboard.setString(lines.join("\n"));
+			showToast("Diagnostics copied - send them to the dev");
+			setWpStatus("Diagnostics copied to clipboard. Send them over so the hook can be targeted.");
+		} catch {
+			setWpStatus("Copy failed (clipboard unavailable).");
+		}
+	}
+
 	function reapply() {
 		const applied = applyTheme();
 		if (applied.length) {
@@ -295,6 +334,11 @@ function Settings() {
 						}}
 					/>
 				)}
+				<FormRow
+					label="Copy diagnostics"
+					subLabel="Copies the chat-view lookup results for the dev"
+					onPress={copyDiagnostics}
+				/>
 				{!!wpStatus && (
 					<FormRow label="Status" subLabel={wpStatus} />
 				)}
