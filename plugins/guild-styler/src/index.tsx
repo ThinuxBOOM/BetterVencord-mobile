@@ -1,4 +1,4 @@
-import { findByName, findByStoreName } from "@vendetta/metro";
+import { find, findByDisplayName, findByName, findByStoreName } from "@vendetta/metro";
 import { React, ReactNative } from "@vendetta/metro/common";
 import { after } from "@vendetta/patcher";
 import { storage } from "@vendetta/plugin";
@@ -103,6 +103,51 @@ function applyForGuild(guildId: string | null): boolean {
 let unsubscribe: (() => void) | undefined;
 let unpatchWallpaper: (() => void) | undefined;
 
+// Same multi-name chat-view resolver as DiscordStyler: the component name
+// changes between Discord versions.
+function resolveChatView(): { obj: any; key: string; } | null {
+	const names = ["MessagesConnected", "Messages", "ChatMessages", "MessageListConnected", "ConnectedMessages"];
+	const lookups: ((n: string) => any)[] = [
+		(n) => findByDisplayName(n, false),
+		(n) => findByName(n, false),
+		(n) => findByDisplayName(n, true),
+		(n) => findByName(n, true),
+	];
+	const seen = new Set<any>();
+	const unwrap = (holder: any): { obj: any; key: string; } | null => {
+		if (!holder) return null;
+		for (const k of [holder, holder?.default, holder?.type]) {
+			try {
+				if (k?.prototype?.render && typeof k.prototype.render === "function")
+					return { obj: k.prototype, key: "render" };
+				if (typeof k === "function" && holder && typeof holder === "object" && holder.default === k)
+					return { obj: holder, key: "default" };
+			} catch { /* try next shape */ }
+		}
+		return null;
+	};
+
+	for (const n of names) {
+		for (const get of lookups) {
+			let c: any;
+			try { c = get(n); } catch { continue; }
+			if (!c || seen.has(c)) continue;
+			seen.add(c);
+			const hit = unwrap(c);
+			if (hit) return hit;
+		}
+		try {
+			const m = find((exp: any) => exp?.default?.displayName === n || exp?.displayName === n || exp?.default?.name === n);
+			if (m && !seen.has(m)) {
+				seen.add(m);
+				const hit = unwrap(m);
+				if (hit) return hit;
+			}
+		} catch { /* keep looking */ }
+	}
+	return null;
+}
+
 function num(v: unknown, fb: number): number {
 	const n = Number(v);
 	return Number.isFinite(n) ? n : fb;
@@ -141,9 +186,9 @@ function patchWallpaper() {
 	try {
 		const RN = ReactNative as any;
 		if (!RN?.ImageBackground || !RN?.View) return;
-		const Messages = findByName("MessagesConnected");
-		if (!Messages?.prototype?.render) return;
-		unpatchWallpaper = after("render", Messages.prototype, (_: any, ret: any) => {
+		const view = resolveChatView();
+		if (!view) return;
+		unpatchWallpaper = after(view.key, view.obj, (_: any, ret: any) => {
 			try {
 				if (!currentWallpaper()) return ret;
 				const node = findInReactTree(ret, (t: any) => t?.props && "HACK_fixModalInteraction" in t.props && t.props.style);
