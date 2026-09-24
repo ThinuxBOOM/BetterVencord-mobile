@@ -1,0 +1,11 @@
+{
+	"name": "ChatArchive",
+	"description": "Export the current channel's history to HTML or Markdown. Copied to your clipboard for sharing from mobile.",
+	"authors": [
+		{
+			"name": "Thinux",
+			"id": "0"
+		}
+	],
+	"main": "src/index.tsx"
+}

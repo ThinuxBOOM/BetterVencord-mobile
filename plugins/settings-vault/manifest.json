@@ -1,0 +1,11 @@
+{
+	"name": "SettingsVault",
+	"description": "One-file backup and restore for your BetterVencord mobile setup: plugin settings and theme links.",
+	"authors": [
+		{
+			"name": "Thinux",
+			"id": "0"
+		}
+	],
+	"main": "src/index.tsx"
+}

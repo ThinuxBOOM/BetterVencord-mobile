@@ -1,0 +1,11 @@
+{
+	"name": "DraftsPlus",
+	"description": "Remembers every message you send (per channel) so you can copy any of them back.",
+	"authors": [
+		{
+			"name": "Thinux",
+			"id": "0"
+		}
+	],
+	"main": "src/index.tsx"
+}

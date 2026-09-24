@@ -1,0 +1,11 @@
+{
+	"name": "SnippetStudio",
+	"description": "Toggleable mobile UI cleanups (gift, GIF, sticker and Apps buttons) plus your own custom CSS box.",
+	"authors": [
+		{
+			"name": "Thinux",
+			"id": "0"
+		}
+	],
+	"main": "src/index.tsx"
+}

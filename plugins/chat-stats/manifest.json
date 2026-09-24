@@ -1,0 +1,11 @@
+{
+	"name": "ChatStats",
+	"description": "Local-only analytics for any channel: top authors, words, busy days, your share.",
+	"authors": [
+		{
+			"name": "Thinux",
+			"id": "0"
+		}
+	],
+	"main": "src/index.tsx"
+}

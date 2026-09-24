@@ -1,0 +1,11 @@
+{
+	"name": "ServerJanitor",
+	"description": "Mod tools: inventory server emojis and stickers, delete the dead ones, export as JSON.",
+	"authors": [
+		{
+			"name": "Thinux",
+			"id": "0"
+		}
+	],
+	"main": "src/index.tsx"
+}

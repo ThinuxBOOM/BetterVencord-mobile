@@ -1,0 +1,11 @@
+{
+	"name": "GuildStyler",
+	"description": "Per-server accent colors, auto-swapped on server switch. Falls back to your global accent elsewhere.",
+	"authors": [
+		{
+			"name": "Thinux",
+			"id": "0"
+		}
+	],
+	"main": "src/index.tsx"
+}

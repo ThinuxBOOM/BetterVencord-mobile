@@ -1,0 +1,11 @@
+{
+	"name": "RemindMe",
+	"description": "Long-press any message to be reminded about it later. Local only, survives restarts.",
+	"authors": [
+		{
+			"name": "Thinux",
+			"id": "0"
+		}
+	],
+	"main": "src/index.tsx"
+}

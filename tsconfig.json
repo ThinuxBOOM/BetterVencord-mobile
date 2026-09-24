@@ -1,0 +1,17 @@
+{
+	"compilerOptions": {
+		"target": "ESNext",
+		"module": "ESNext",
+		"moduleResolution": "bundler",
+		"jsx": "react-jsx",
+		"esModuleInterop": true,
+		"allowJs": true,
+		"skipLibCheck": true,
+		"strict": false,
+		"noEmit": true
+	},
+	"include": [
+		"plugins",
+		"node_modules/vendetta-types"
+	]
+}
