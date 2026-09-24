@@ -102,47 +102,49 @@ function applyForGuild(guildId: string | null): boolean {
 
 let unsubscribe: (() => void) | undefined;
 let unpatchWallpaper: (() => void) | undefined;
+let wallpaperHooked = false;
+let wallpaperVia = "";
 
 // Same multi-name chat-view resolver as DiscordStyler: the component name
 // AND shape change between Discord versions (class vs memo vs forwardRef).
-function chatViewCandidates(): { obj: any; key: string; }[] {
-	const out: { obj: any; key: string; }[] = [];
-	const push = (obj: any, key: string) => {
+function chatViewCandidates(): { obj: any; key: string; via: string; }[] {
+	const out: { obj: any; key: string; via: string; }[] = [];
+	const push = (obj: any, key: string, via: string) => {
 		try {
 			if (!obj || typeof obj[key] !== "function") return;
 			if (out.some(e => e.obj === obj && e.key === key)) return;
-			out.push({ obj, key });
+			out.push({ obj, key, via });
 		} catch { /* ignore */ }
 	};
 
 	const names = ["MessagesConnected", "Messages", "ChatMessages", "MessageListConnected", "ConnectedMessages"];
-	const holders: any[] = [];
+	const holders: { h: any; via: string; }[] = [];
 	for (const n of names) {
-		const attempts: (() => any)[] = [
-			() => findByDisplayName(n, false),
-			() => findByName(n, false),
-			() => findByDisplayName(n, true),
-			() => findByName(n, true),
+		const attempts: [string, () => any][] = [
+			[`displayName:${n}`, () => findByDisplayName(n, false)],
+			[`name:${n}`, () => findByName(n, false)],
+			[`displayName:${n}#default`, () => findByDisplayName(n, true)],
+			[`name:${n}#default`, () => findByName(n, true)],
 		];
-		for (const get of attempts) {
+		for (const [via, get] of attempts) {
 			try {
 				const h = get();
-				if (h) holders.push(h);
+				if (h) holders.push({ h, via });
 			} catch { /* not found under this lookup */ }
 		}
 		try {
 			const m = find((exp: any) => exp?.default?.displayName === n || exp?.displayName === n || exp?.default?.name === n);
-			if (m) holders.push(m);
+			if (m) holders.push({ h: m, via: `scan:${n}` });
 		} catch { /* keep looking */ }
 	}
 
-	for (const h of holders) {
+	for (const { h, via } of holders) {
 		for (const o of [h, h?.default, h?.type, h?.default?.type]) {
 			if (!o) continue;
-			if (o?.prototype?.render) push(o.prototype, "render");
-			else if (typeof o?.render === "function") push(o, "render");
-			else if (typeof o?.type === "function") push(o, "type");
-			if (typeof o?.default === "function") push(o, "default");
+			if (o?.prototype?.render) push(o.prototype, "render", `${via}>class`);
+			else if (typeof o?.render === "function") push(o, "render", `${via}>forwardRef`);
+			else if (typeof o?.type === "function") push(o, "type", `${via}>memo`);
+			if (typeof o?.default === "function") push(o, "default", `${via}>module`);
 		}
 	}
 	return out;
@@ -183,6 +185,8 @@ function patchWallpaper() {
 		try { unpatchWallpaper(); } catch { }
 		unpatchWallpaper = undefined;
 	}
+	wallpaperHooked = false;
+	wallpaperVia = "";
 	try {
 		const RN = ReactNative as any;
 		if (!RN?.ImageBackground || !RN?.View) return;
@@ -201,6 +205,8 @@ function patchWallpaper() {
 		for (const c of chatViewCandidates()) {
 			try {
 				unpatchWallpaper = after(c.key, c.obj, handler);
+				wallpaperHooked = true;
+				wallpaperVia = c.via;
 				return;
 			} catch { /* try next candidate */ }
 		}
@@ -314,6 +320,12 @@ function Settings() {
 				/>
 				<FormRow label="Save style for this server" onPress={save} />
 				<FormRow label="Apply now" subLabel="Re-apply for the open server" onPress={applyNow} />
+				<FormRow
+					label="Wallpaper hook"
+					subLabel={wallpaperHooked
+						? `Attached (${wallpaperVia}). Per-server wallpapers render inside the global one.`
+						: "Not attached on this Discord version."}
+				/>
 				{!!status && (
 					<FormRow label="Status" subLabel={status} />
 				)}
@@ -355,6 +367,8 @@ export default {
 		unsubscribe = undefined;
 		try { unpatchWallpaper?.(); } catch { }
 		unpatchWallpaper = undefined;
+		wallpaperHooked = false;
+		wallpaperVia = "";
 		try { restore(); } catch { }
 	},
 	settings: Settings,
