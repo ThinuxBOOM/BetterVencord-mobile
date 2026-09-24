@@ -1,0 +1,11 @@
+{
+	"name": "MessageLogger",
+	"description": "Keeps a local log of deleted and edited messages with a viewer. (Mobile adaptation of Vencord's MessageLogger.)",
+	"authors": [
+		{
+			"name": "Thinux",
+			"id": "0"
+		}
+	],
+	"main": "src/index.tsx"
+}

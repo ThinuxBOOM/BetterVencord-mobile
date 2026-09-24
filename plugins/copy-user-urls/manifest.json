@@ -1,0 +1,11 @@
+{
+	"name": "CopyUserURLs",
+	"description": "Adds a 'Copy profile URL' option to the message long-press menu. (Port of Vencord's CopyUserURLs.)",
+	"authors": [
+		{
+			"name": "Thinux",
+			"id": "0"
+		}
+	],
+	"main": "src/index.tsx"
+}

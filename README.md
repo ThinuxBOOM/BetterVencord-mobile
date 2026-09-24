@@ -33,6 +33,20 @@ Base: `https://thinuxboom.github.io/BetterVencord-mobile/dist/`
 | GuildStyler | `guild-styler` | Per-server accent colors, auto-swapped on server switch |
 | SnippetStudio | `snippet-studio` | Hides gift/GIF/sticker/Apps buttons + custom CSS box |
 
+## Stock Vencord ports
+
+Selected stock Vencord plugins, ported where mobile allows. Original authors
+are credited in each plugin file; all ports stay under Vencord's GPL-3.0.
+
+| Plugin | URL suffix | Mobile adaptation |
+|---|---|---|
+| ClearURLs | `clear-urls` | Strips tracking params from links you send (edits not covered on mobile) |
+| MessageLogger | `message-logger` | Local deleted/edited log with viewer and copy-back (no inline ghosts; React Native has no DOM) |
+| RelationshipNotifier | `relationship-notifier` | Toasts on friend/server/group removal via snapshot diffing |
+| CopyUserURLs | `copy-user-urls` | Copy-author-profile-URL row in the message long-press menu |
+| CopyEmojiMarkdown | `copy-emoji-markdown` | Copies custom emojis in a message as `<:name:id>` markdown |
+| CopyStickerLinks | `copy-sticker-links` | Copy/open sticker links from the sticker sheet and sticker messages |
+
 Full URL example:
 
 ```

@@ -1,0 +1,11 @@
+{
+	"name": "RelationshipNotifier",
+	"description": "Notifies you when a friend, group chat, or server removes you. (Port of Vencord's RelationshipNotifier.)",
+	"authors": [
+		{
+			"name": "Thinux",
+			"id": "0"
+		}
+	],
+	"main": "src/index.tsx"
+}

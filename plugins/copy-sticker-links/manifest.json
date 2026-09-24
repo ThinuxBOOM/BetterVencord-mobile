@@ -1,0 +1,11 @@
+{
+	"name": "CopyStickerLinks",
+	"description": "Copy and open sticker links from the sticker sheet. (Port of Vencord's CopyStickerLinks.)",
+	"authors": [
+		{
+			"name": "Thinux",
+			"id": "0"
+		}
+	],
+	"main": "src/index.tsx"
+}

@@ -1,0 +1,11 @@
+{
+	"name": "ClearURLs",
+	"description": "Automatically removes tracking elements from URLs you send. (Port of Vencord's ClearURLs.)",
+	"authors": [
+		{
+			"name": "Thinux",
+			"id": "0"
+		}
+	],
+	"main": "src/index.tsx"
+}

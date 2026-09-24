@@ -1,0 +1,11 @@
+{
+	"name": "CopyEmojiMarkdown",
+	"description": "Copy custom emojis in a message as markdown (<:name:id>). (Port of Vencord's CopyEmojiMarkdown.)",
+	"authors": [
+		{
+			"name": "Thinux",
+			"id": "0"
+		}
+	],
+	"main": "src/index.tsx"
+}
