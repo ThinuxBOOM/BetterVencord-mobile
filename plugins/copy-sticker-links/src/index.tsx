@@ -12,7 +12,7 @@ import { find, findByProps } from "@vendetta/metro";
 import { React, clipboard, url } from "@vendetta/metro/common";
 import { after, before } from "@vendetta/patcher";
 import { findInReactTree } from "@vendetta/utils";
-import { Button } from "@vendetta/ui/components";
+import { Button, Forms } from "@vendetta/ui/components";
 import { showToast } from "@vendetta/ui/toasts";
 
 const AnyButton = Button as any;
@@ -91,7 +91,7 @@ function patchMessageSheet() {
 	try {
 		const LazyActionSheet = findByProps("openLazy", "hideActionSheet");
 		if (!LazyActionSheet) return;
-		const RowComponent = (findByProps("ActionSheetRow") as any)?.ActionSheetRow;
+		const RowComponent = (findByProps("ActionSheetRow") as any)?.ActionSheetRow ?? Forms.FormRow;
 
 		patches.push(before("openLazy", LazyActionSheet, ([component, key, msg]: any[]) => {
 			const message = msg?.message;

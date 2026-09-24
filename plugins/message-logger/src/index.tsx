@@ -52,6 +52,25 @@ interface LogEntry extends Snap {
 let subscribed = false;
 const unsubs: (() => void)[] = [];
 
+// The snapshot cache is ephemeral: keep a working copy in memory and flush
+// to storage periodically (every message would otherwise re-serialize up to
+// 1000 snapshots). The log itself persists immediately; it is the valuable
+// data and stays small.
+let memCache: Record<string, Snap> | null = null;
+let cacheWrites = 0;
+
+function getCache(): Record<string, Snap> {
+	if (!memCache) memCache = { ...readCache() };
+	return memCache;
+}
+
+function saveCache(force = false) {
+	if (!memCache) return;
+	cacheWrites++;
+	if (!force && cacheWrites % 25 !== 0) return;
+	writeCache({ ...memCache });
+}
+
 function readCache(): Record<string, Snap> {
 	const c = storage.cache as Record<string, Snap> | undefined;
 	return c && typeof c === "object" ? c : {};
@@ -131,9 +150,8 @@ function onCreate(e: any) {
 	try {
 		const s = snapOf(e?.message);
 		if (!s || shouldIgnore(e.message, false)) return;
-		const c = readCache();
-		c[s.id] = s;
-		writeCache(c);
+		getCache()[s.id] = s;
+		saveCache();
 	} catch { /* never break the flux pipeline */ }
 }
 
@@ -142,12 +160,12 @@ function onUpdate(e: any) {
 		const m = e?.message;
 		if (!m?.id || !m?.edited_timestamp) return;
 		if (shouldIgnore(m, true)) return;
-		const c = readCache();
+		const c = getCache();
 		const old = c[String(m.id)];
 		const next = snapOf(m);
 		if (next) {
 			c[next.id] = next;
-			writeCache(c);
+			saveCache();
 		}
 		if (old && typeof m.content === "string" && m.content !== old.content) {
 			pushLog({ ...(next ?? old), kind: "edited", oldContent: old.content, loggedAt: Date.now() });
@@ -158,11 +176,11 @@ function onUpdate(e: any) {
 function onDelete(channelId: string, id: string) {
 	try {
 		if (!id) return;
-		const c = readCache();
+		const c = getCache();
 		const s = c[String(id)];
 		if (!s) return;
 		delete c[s.id];
-		writeCache(c);
+		saveCache();
 		if (shouldIgnore({ author: { id: s.authorId, bot: s.bot }, channel_id: channelId || s.channelId }, false)) return;
 		if (!storage.logDeletes) return;
 		pushLog({ ...s, channelId: channelId || s.channelId, kind: "deleted", loggedAt: Date.now() });
@@ -219,6 +237,7 @@ function Settings() {
 		const doClear = () => {
 			storage.log = [];
 			storage.cache = {};
+			memCache = null;
 			showToast("Message log cleared");
 		};
 		try {
@@ -313,6 +332,8 @@ export default {
 		subscribed = subscribeFlux();
 	},
 	onUnload: () => {
+		try { saveCache(true); } catch { }
+		memCache = null;
 		while (unsubs.length) {
 			try { unsubs.pop()?.(); } catch { }
 		}
