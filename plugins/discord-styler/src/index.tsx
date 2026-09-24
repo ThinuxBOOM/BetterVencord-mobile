@@ -104,49 +104,50 @@ let unpatchWallpaper: (() => void) | undefined;
 let wallpaperSupported = false;
 let resolvedChatView = "";
 
-// The chat view's component name changes between Discord versions, so try
-// every known name through every lookup before giving up.
-function resolveChatView(): { obj: any; key: string; name: string; } | null {
-	const names = ["MessagesConnected", "Messages", "ChatMessages", "MessageListConnected", "ConnectedMessages"];
-	const lookups: ((n: string) => any)[] = [
-		(n) => findByDisplayName(n, false),
-		(n) => findByName(n, false),
-		(n) => findByDisplayName(n, true),
-		(n) => findByName(n, true),
-	];
-	const seen = new Set<any>();
-	const unwrap = (holder: any): { obj: any; key: string; } | null => {
-		if (!holder) return null;
-		for (const k of [holder, holder?.default, holder?.type]) {
-			try {
-				if (k?.prototype?.render && typeof k.prototype.render === "function")
-					return { obj: k.prototype, key: "render" };
-				if (typeof k === "function" && holder && typeof holder === "object" && holder.default === k)
-					return { obj: holder, key: "default" };
-			} catch { /* try next shape */ }
-		}
-		return null;
+// The chat view's component name AND shape change between Discord versions
+// (class vs memo vs forwardRef), so collect every patchable (object, key)
+// pair across all known names instead of betting on one.
+function chatViewCandidates(): { obj: any; key: string; via: string; }[] {
+	const out: { obj: any; key: string; via: string; }[] = [];
+	const push = (obj: any, key: string, via: string) => {
+		try {
+			if (!obj || typeof obj[key] !== "function") return;
+			if (out.some(e => e.obj === obj && e.key === key)) return;
+			out.push({ obj, key, via });
+		} catch { /* ignore */ }
 	};
 
+	const names = ["MessagesConnected", "Messages", "ChatMessages", "MessageListConnected", "ConnectedMessages"];
+	const holders: { h: any; via: string; }[] = [];
 	for (const n of names) {
-		for (const get of lookups) {
-			let c: any;
-			try { c = get(n); } catch { continue; }
-			if (!c || seen.has(c)) continue;
-			seen.add(c);
-			const hit = unwrap(c);
-			if (hit) return { ...hit, name: n };
+		const attempts: [string, () => any][] = [
+			[`displayName:${n}`, () => findByDisplayName(n, false)],
+			[`name:${n}`, () => findByName(n, false)],
+			[`displayName:${n}#default`, () => findByDisplayName(n, true)],
+			[`name:${n}#default`, () => findByName(n, true)],
+		];
+		for (const [via, get] of attempts) {
+			try {
+				const h = get();
+				if (h) holders.push({ h, via });
+			} catch { /* not found under this lookup */ }
 		}
 		try {
 			const m = find((exp: any) => exp?.default?.displayName === n || exp?.displayName === n || exp?.default?.name === n);
-			if (m && !seen.has(m)) {
-				seen.add(m);
-				const hit = unwrap(m);
-				if (hit) return { ...hit, name: n };
-			}
+			if (m) holders.push({ h: m, via: `scan:${n}` });
 		} catch { /* keep looking */ }
 	}
-	return null;
+
+	for (const { h, via } of holders) {
+		for (const o of [h, h?.default, h?.type, h?.default?.type]) {
+			if (!o) continue;
+			if (o?.prototype?.render) push(o.prototype, "render", `${via}>class`);
+			else if (typeof o?.render === "function") push(o, "render", `${via}>forwardRef`);
+			else if (typeof o?.type === "function") push(o, "type", `${via}>memo`);
+			if (typeof o?.default === "function") push(o, "default", `${via}>module`);
+		}
+	}
+	return out;
 }
 
 function num(v: unknown, fb: number): number {
@@ -175,29 +176,37 @@ function patchWallpaper() {
 	}
 	wallpaperSupported = false;
 	resolvedChatView = "";
+	let RN: any;
 	try {
-		const RN = ReactNative as any;
+		RN = ReactNative as any;
 		if (!RN?.ImageBackground || !RN?.View) return;
-		const view = resolveChatView();
-		if (!view) return;
-		unpatchWallpaper = after(view.key, view.obj, (_: any, ret: any) => {
-			try {
-				const uri = String(storage.wallpaperUrl ?? "").trim();
-				if (!uri) return ret;
-				// Make the messages layer transparent so the image shows
-				// through, mirroring the loader's own theme-background patch.
-				const node = findInReactTree(ret, (t: any) => t?.props && "HACK_fixModalInteraction" in t.props && t.props.style);
-				if (node?.props) {
-					node.props.style = [node.props.style, { backgroundColor: "transparent" }];
-				}
-				return <WallpaperBackground>{ret}</WallpaperBackground>;
-			} catch {
-				return ret;
+	} catch {
+		return;
+	}
+	const handler = (_: any, ret: any) => {
+		try {
+			const uri = String(storage.wallpaperUrl ?? "").trim();
+			if (!uri) return ret;
+			// Make the messages layer transparent so the image shows
+			// through, mirroring the loader's own theme-background patch.
+			const node = findInReactTree(ret, (t: any) => t?.props && "HACK_fixModalInteraction" in t.props && t.props.style);
+			if (node?.props) {
+				node.props.style = [node.props.style, { backgroundColor: "transparent" }];
 			}
-		});
-		resolvedChatView = view.name;
-		wallpaperSupported = true;
-	} catch { /* chat view unavailable on this version */ }
+			return <WallpaperBackground>{ret}</WallpaperBackground>;
+		} catch {
+			return ret;
+		}
+	};
+	// First candidate that accepts the patch wins.
+	for (const c of chatViewCandidates()) {
+		try {
+			unpatchWallpaper = after(c.key, c.obj, handler);
+			resolvedChatView = c.via;
+			wallpaperSupported = true;
+			return;
+		} catch { /* try next candidate */ }
+	}
 }
 
 function Settings() {
@@ -205,12 +214,19 @@ function Settings() {
 	const [status, setStatus] = React.useState("");
 	const [wpStatus, setWpStatus] = React.useState("");
 
-	function describe(c: any): string {
+	function describe(c: any, depth = 0): string {
 		try {
 			if (!c) return "missing";
 			if (c?.prototype?.render) return "class-component";
+			if (c?.$$typeof === Symbol.for("react.memo")) return `memo(${depth ? "..." : describe(c.type, 1)})`;
+			if (c?.$$typeof === Symbol.for("react.forward_ref")) return "forwardRef";
 			if (typeof c === "function") return "function-component";
-			if (typeof c === "object") return `object[${Object.keys(c).slice(0, 6).join("|")}]`;
+			if (typeof c === "object") {
+				const keys = Object.keys(c).slice(0, 3);
+				if (keys.length === 1 && keys[0] === "default")
+					return `module(default=${depth ? "..." : describe(c.default, 1)})`;
+				return `object[${keys.join("|")}]`;
+			}
 			return typeof c;
 		} catch {
 			return "unreadable";

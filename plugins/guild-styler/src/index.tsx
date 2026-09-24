@@ -104,48 +104,48 @@ let unsubscribe: (() => void) | undefined;
 let unpatchWallpaper: (() => void) | undefined;
 
 // Same multi-name chat-view resolver as DiscordStyler: the component name
-// changes between Discord versions.
-function resolveChatView(): { obj: any; key: string; } | null {
-	const names = ["MessagesConnected", "Messages", "ChatMessages", "MessageListConnected", "ConnectedMessages"];
-	const lookups: ((n: string) => any)[] = [
-		(n) => findByDisplayName(n, false),
-		(n) => findByName(n, false),
-		(n) => findByDisplayName(n, true),
-		(n) => findByName(n, true),
-	];
-	const seen = new Set<any>();
-	const unwrap = (holder: any): { obj: any; key: string; } | null => {
-		if (!holder) return null;
-		for (const k of [holder, holder?.default, holder?.type]) {
-			try {
-				if (k?.prototype?.render && typeof k.prototype.render === "function")
-					return { obj: k.prototype, key: "render" };
-				if (typeof k === "function" && holder && typeof holder === "object" && holder.default === k)
-					return { obj: holder, key: "default" };
-			} catch { /* try next shape */ }
-		}
-		return null;
+// AND shape change between Discord versions (class vs memo vs forwardRef).
+function chatViewCandidates(): { obj: any; key: string; }[] {
+	const out: { obj: any; key: string; }[] = [];
+	const push = (obj: any, key: string) => {
+		try {
+			if (!obj || typeof obj[key] !== "function") return;
+			if (out.some(e => e.obj === obj && e.key === key)) return;
+			out.push({ obj, key });
+		} catch { /* ignore */ }
 	};
 
+	const names = ["MessagesConnected", "Messages", "ChatMessages", "MessageListConnected", "ConnectedMessages"];
+	const holders: any[] = [];
 	for (const n of names) {
-		for (const get of lookups) {
-			let c: any;
-			try { c = get(n); } catch { continue; }
-			if (!c || seen.has(c)) continue;
-			seen.add(c);
-			const hit = unwrap(c);
-			if (hit) return hit;
+		const attempts: (() => any)[] = [
+			() => findByDisplayName(n, false),
+			() => findByName(n, false),
+			() => findByDisplayName(n, true),
+			() => findByName(n, true),
+		];
+		for (const get of attempts) {
+			try {
+				const h = get();
+				if (h) holders.push(h);
+			} catch { /* not found under this lookup */ }
 		}
 		try {
 			const m = find((exp: any) => exp?.default?.displayName === n || exp?.displayName === n || exp?.default?.name === n);
-			if (m && !seen.has(m)) {
-				seen.add(m);
-				const hit = unwrap(m);
-				if (hit) return hit;
-			}
+			if (m) holders.push(m);
 		} catch { /* keep looking */ }
 	}
-	return null;
+
+	for (const h of holders) {
+		for (const o of [h, h?.default, h?.type, h?.default?.type]) {
+			if (!o) continue;
+			if (o?.prototype?.render) push(o.prototype, "render");
+			else if (typeof o?.render === "function") push(o, "render");
+			else if (typeof o?.type === "function") push(o, "type");
+			if (typeof o?.default === "function") push(o, "default");
+		}
+	}
+	return out;
 }
 
 function num(v: unknown, fb: number): number {
@@ -186,9 +186,7 @@ function patchWallpaper() {
 	try {
 		const RN = ReactNative as any;
 		if (!RN?.ImageBackground || !RN?.View) return;
-		const view = resolveChatView();
-		if (!view) return;
-		unpatchWallpaper = after(view.key, view.obj, (_: any, ret: any) => {
+		const handler = (_: any, ret: any) => {
 			try {
 				if (!currentWallpaper()) return ret;
 				const node = findInReactTree(ret, (t: any) => t?.props && "HACK_fixModalInteraction" in t.props && t.props.style);
@@ -199,7 +197,13 @@ function patchWallpaper() {
 			} catch {
 				return ret;
 			}
-		});
+		};
+		for (const c of chatViewCandidates()) {
+			try {
+				unpatchWallpaper = after(c.key, c.obj, handler);
+				return;
+			} catch { /* try next candidate */ }
+		}
 	} catch { /* chat view unavailable on this version */ }
 }
 
